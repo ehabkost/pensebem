@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+#
+# This module tries to implement an algorithm that gives exactly the same
+# answers, and compare them with the samples.
 
 import samples
 

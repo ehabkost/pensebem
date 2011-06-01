@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+#
+# This scripts renders the samples from the SAMPLES file in a matrix format.
 
 import sys
 import samples

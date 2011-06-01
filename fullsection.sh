@@ -1,4 +1,8 @@
 #!/bin/sh
+#
+# This script simply collect answer samples to be stored on the SAMPLES file.
+# You should run it while testing the book answers on a real device.
+
 
 book="$1"
 sec="$2"

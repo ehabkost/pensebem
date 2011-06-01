@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+#
+# this script simply dumps a sample from the SAMPLES file.
 
 def read():
 	"""Read sequence of samples
