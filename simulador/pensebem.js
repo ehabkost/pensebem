@@ -1,5 +1,8 @@
 pulseAudioBug = navigator.userAgent.indexOf('Linux') > 0;
 
+if (typeof Float32Array !== "function")
+    Float32Array = Array;
+
 Songs = {
     Welcome: 'egage',
     GameSelected: 'CgC',
@@ -49,10 +52,7 @@ Som = {
     },
     playSong: function(song, callback) {
         Som.songFinishedCallback = callback || function() {};
-        Som.playQueue = [];
-        for (var note in song) {
-            Som.playQueue.push(song[note]);
-        }
+        Som.playQueue = song;
         Som.playSoundQueue(true);
     },
     encodeBase64: function(str) {
@@ -89,8 +89,6 @@ Som = {
     },
     encode8BitAudio: function(data) {
         var n = data.length;
-        var integer = 0,
-            i;
 
         // 8-bit mono WAVE header template
         var header = 'RIFF<##>WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00<##><##>\x01\x00\x08\x00data<##>';
@@ -167,7 +165,7 @@ Som = {
         const FreqE5 = 659.255;
 
         if (!Som.NoteToToneTable) {
-            if (PB.bugfix == false) {
+            if (!PB.bugfix) {
                 Som.NoteToToneTable = {
                     'c': Som.newTone(FreqD4),
                     'd': Som.newTone(FreqE4),
@@ -306,6 +304,32 @@ Aritmetica = {
         Display.setSpecialDigit2('=');
     },
     advanceQuestion: function() {
+        function isDivisionByZero() {
+            return Aritmetica.operation == '/' && Aritmetica.secondDigit == 0;
+        }
+        function isSumOrSubtractionWithZero() {
+            return (Aritmetica.operation == '+' || Aritmetica.operation == '-') && Aritmetica.secondDigit == 0;
+        }
+        function isDivisionOrMultiplication() {
+            return Aritmetica.operation == '*' || Aritmetica.operation == '/';
+        }
+        function isDivisionOrMultiplicationWithOne() {
+            return isDivisionOrMultiplication() && Aritmetica.secondDigit == 1;
+        }
+        function isZeroDividedOrMultipliedBySomething() {
+            return isDivisionOrMultiplication() && Aritmetica.firstDigit == 0;
+        }
+        function isDivisionOrSubtractionAndResultIsLessThanOne() {
+            return (Aritmetica.operation == '/' || Aritmetica.operation == '-') && Aritmetica.firstDigit < Aritmetica.secondDigit;
+        }
+        function isForbiddenCombination() {
+            return isDivisionByZero() ||
+                   isSumOrSubtractionWithZero() ||
+                   isDivisionOrMultiplicationWithOne() ||
+                   isDivisionOrSubtractionAndResultIsLessThanOne() ||
+                   (Aritmetica.showResultFlag && isZeroDividedOrMultipliedBySomething());
+        }
+
         if (Aritmetica.currentQuestion++ >= Aritmetica.numQuestions) {
             PB.delay(10, function() {
                 Display.showNumberAtDigit(Aritmetica.points, 7);
@@ -318,20 +342,18 @@ Aritmetica = {
         }
         Aritmetica.tries = 0;
 
-        var forbiddenCombination = true;
-        while (forbiddenCombination) {
+        do {
             Aritmetica.operation = Aritmetica.possibleOperations[~~ (Math.random() * (Aritmetica.possibleOperations.length - 1))];
             Aritmetica.firstDigit = ~~ (Math.random() * 99);
             Aritmetica.secondDigit = ~~ (Math.random() * 9);
-            forbiddenCombination = ((Aritmetica.operation == '/') && (Aritmetica.secondDigit == 0)) ||
-                                    ((Aritmetica.operation in ['-', '+']) && (Aritmetica.secondDigit == 0)) ||
-                                    ((Aritmetica.operation in ['/', '*']) && (Aritmetica.secondDigit == 1));
-        }
+        } while (isForbiddenCombination());
 
-        if (Aritmetica.secondDigit) Aritmetica.firstDigit -= Aritmetica.firstDigit % Aritmetica.secondDigit;
+        if (Aritmetica.secondDigit && isDivisionOrMultiplication())
+            Aritmetica.firstDigit -= Aritmetica.firstDigit % Aritmetica.secondDigit;
         Aritmetica.answer = Aritmetica.OperatorFunctionTable[Aritmetica.operation](Aritmetica.firstDigit, Aritmetica.secondDigit);
         Aritmetica.redrawScreen();
-        if (Aritmetica.showOperatorFlag) PB.prompt(7, 3);
+        if (Aritmetica.showOperatorFlag)
+            PB.prompt(7, 3);
     }
 };
 
@@ -501,7 +523,7 @@ MemoriaTons = {
         }[b];
         if (note) {
             Display.clear();
-            if (MemoriaTons.pressedEnter == 1) {
+            if (MemoriaTons.pressedEnter) {
                 MemoriaTons.pressedEnter = false;
                 Som.playQueue = [];
             }
@@ -540,7 +562,7 @@ AdivinheONumero = {
         AdivinheONumero.tries = 0;
         Display.showNumberAtDigit(AdivinheONumero.firstDigit, 2);
         Display.showNumberAtDigit(AdivinheONumero.secondDigit, 6);
-        PB.prompt(4, 2);
+        PB.prompt(4, 2, '*');
     },
     showAnswer: function(s) {
         Display.clear();
@@ -571,7 +593,7 @@ AdivinheONumero = {
             AdivinheONumero.tries++;
             if (AdivinheONumero.tries < AdivinheONumero.maxTries) {
                 Som.playSong(Songs.Wrong, function() {
-                    PB.prompt(4, 2);
+                    PB.prompt(4, 2, '*');
                 });
                 return;
             }
@@ -599,17 +621,18 @@ Livro = {
     StateChoosingBook: 0,
     StateQuestioning: 1,
     reset: function() {
-        Som.playSong(Songs.GameSelected);
-        Livro.state = Livro.StateChoosingBook;
-        PB.prompt();
+        Som.playSong(Songs.GameSelected, function() {
+            Livro.state = Livro.StateChoosingBook;
+            PB.prompt();
+        });
     },
     oneLoopIteration: function() {
         switch (Livro.state) {
         case Livro.StateChoosingBook:
             if (!Prompt.done) return;
             const bookCode = Prompt.getInput();
-            const bookNumber = parseInt(bookCode.substring(0, 2), 10);
-            const sectionNumber = parseInt(bookCode.substring(2), 10);
+            const bookNumber = parseInt(bookCode.substring(0, 2));
+            const sectionNumber = parseInt(bookCode.substring(2));
 
             if (sectionNumber < 1 || sectionNumber > 6 || bookCode < 1) {
                 Display.clear();
@@ -761,11 +784,10 @@ Welcome = {
     oneLoopIteration: function() {},
     buttonPress: function(b) {
         const newActivity = Welcome.ButtonToActivityTable[b];
-        if (newActivity === undefined) {
+        if (newActivity)
+            PB.setActivity(newActivity);
+        else
             Som.lowBeep();
-            return;
-        }
-        PB.setActivity(newActivity);
     }
 };
 
@@ -784,6 +806,7 @@ Prompt = {
     maxDigitSize: 3,
     initialDigit: 7,
     done: false,
+    promptCharacter: '-',
     reset: function() {
         Prompt.done = false;
         Prompt.input = '   ';
@@ -791,8 +814,9 @@ Prompt = {
         if (Prompt.initialDigit == 4 && Prompt.maxDigitSize == 2) {
             Display.setSpecialDigit(' ');
             Display.setSpecialDigit2(' ');
-        }
-        Display.blinkDigit(Prompt.initialDigit, '-');
+            Display.blinkSpecialDigit(Prompt.promptCharacter);
+        } else
+            Display.blinkDigit(Prompt.initialDigit, Prompt.promptCharacter);
     },
     getInput: function() {
         const value = Prompt.input;
@@ -1022,6 +1046,11 @@ PB = {
         PB.setActivity(Standby);
         PB.reset();
         setInterval(PB.oneLoopIteration, 100);
+        PB.turnOnReminderTimer = setTimeout(PB.showReminder, 3000);
+    },
+    showReminder: function() {
+        document.getElementById('ligue-me-tip').setAttribute('display', 'true');
+        PB.turnOnReminderTimer = clearTimeout(PB.turnOnReminderTimer);
     },
     resetDefaultVariables: function() {
         PB.delayTable = {};
@@ -1049,15 +1078,19 @@ PB = {
         if (PB.activity) PB.activity.oneLoopIteration();
     },
     setActivity: function(m, keepScreenContents) {
+        if (PB.turnOnReminderTimer)
+            PB.turnOnReminderTimer = clearTimeout(PB.turnOnReminderTimer);
+        document.getElementById('ligue-me-tip').setAttribute('display', 'none');
         if (!keepScreenContents)
             Display.clear();
         PB.resetDefaultVariables();
         PB.activity = m;
         PB.reset();
     },
-    prompt: function(initialDigit, maxDigitSize) {
+    prompt: function(initialDigit, maxDigitSize, promptCharacter) {
         Prompt.initialDigit = initialDigit || 7;
         Prompt.maxDigitSize = maxDigitSize || 3;
+        Prompt.promptCharacter = promptCharacter || '-';
         PB.previousActivity = PB.activity;
         PB.setActivity(Prompt, true);
     },
